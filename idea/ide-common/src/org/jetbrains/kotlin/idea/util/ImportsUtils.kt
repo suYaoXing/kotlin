@@ -21,13 +21,10 @@ package org.jetbrains.kotlin.idea.imports
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtReferenceExpression
-import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.DescriptorUtils
-import org.jetbrains.kotlin.resolve.ImportPath
+import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getReferenceTargets
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.getImportableDescriptor
-import org.jetbrains.kotlin.resolve.hasAlias
 import org.jetbrains.kotlin.types.KotlinType
 import java.util.*
 
@@ -49,7 +46,7 @@ object ImportPathComparator : Comparator<ImportPath> {
     }
 
     private fun isJavaOrKotlinStdlibImport(path: ImportPath): Boolean {
-        val s = path.pathStr
+        val s = path.getText()
         return s.startsWith("java.") || s.startsWith("javax.")|| s.startsWith("kotlin.")
     }
 }

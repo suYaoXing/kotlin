@@ -29,17 +29,18 @@ interface Import {
 val Import.hasAlias get() = alias != null
 val Import.importedName: Name? get() = if (isAllUnder) null else (alias ?: fqName?.shortName())
 
+fun Import.getText(): String {
+    val fqNameStr = fqName?.toUnsafe()?.render() ?: return ""
+    val pathStr = fqNameStr + if (isAllUnder) ".*" else ""
+    return pathStr + if (alias != null && !isAllUnder) (" as " + alias?.asString()) else ""
+}
+
 data class ImportPath @JvmOverloads constructor(
         override val fqName: FqName,
         override val isAllUnder: Boolean,
         override val alias: Name? = null): Import {
 
-    val pathStr: String
-        get() = fqName.toUnsafe().render() + if (isAllUnder) ".*" else ""
-
-    override fun toString(): String {
-        return pathStr + if (alias != null) " as " + alias.asString() else ""
-    }
+    override fun toString(): String = getText()
 
     companion object {
         @JvmStatic fun fromString(pathStr: String): ImportPath {
