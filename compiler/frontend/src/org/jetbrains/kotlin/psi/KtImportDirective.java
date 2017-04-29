@@ -83,7 +83,7 @@ public class KtImportDirective extends KtElementImplStub<KotlinImportDirectiveSt
 
     @Nullable
     @IfNotParsed
-    public ImportPath getImportPath() {
+    public Import getImportPath() {
         FqName importFqn = getImportedFqName();
         if (importFqn == null) {
             return null;
