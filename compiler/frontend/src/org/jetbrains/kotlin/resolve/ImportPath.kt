@@ -26,7 +26,7 @@ interface Import {
     val alias: Name?
 }
 
-fun Import.hasAlias() = alias != null
+val Import.hasAlias get() = alias != null
 val Import.importedName: Name? get() = if (isAllUnder) null else (alias ?: fqName?.shortName())
 
 data class ImportPath @JvmOverloads constructor(
