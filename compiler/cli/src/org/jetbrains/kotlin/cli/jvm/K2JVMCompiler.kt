@@ -150,84 +150,86 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
         try {
             val destination = arguments.destination
 
-            if (arguments.module != null) {
-                val sanitizedCollector = FilteringMessageCollector(messageCollector, VERBOSE::contains)
-                val moduleScript = CompileEnvironmentUtil.loadModuleDescriptions(arguments.module, sanitizedCollector)
+            when {
+                arguments.module != null -> {
+                    val sanitizedCollector = FilteringMessageCollector(messageCollector, VERBOSE::contains)
+                    val moduleScript = CompileEnvironmentUtil.loadModuleDescriptions(arguments.module, sanitizedCollector)
 
-                if (destination != null) {
-                    messageCollector.report(
-                            STRONG_WARNING,
-                            "The '-d' option with a directory destination is ignored because '-module' is specified"
-                    )
-                }
-
-                val moduleFile = File(arguments.module)
-                val directory = moduleFile.absoluteFile.parentFile
-
-                KotlinToJVMBytecodeCompiler.configureSourceRoots(configuration, moduleScript.modules, directory)
-                configuration.put(JVMConfigurationKeys.MODULE_XML_FILE, moduleFile)
-
-                val environment = createEnvironmentWithScriptingSupport(rootDisposable, configuration, arguments, messageCollector)
-                                  ?: return COMPILATION_ERROR
-
-                registerJavacIfNeeded(environment, arguments).let {
-                    if (!it) return COMPILATION_ERROR
-                }
-
-                KotlinToJVMBytecodeCompiler.compileModules(environment, directory)
-            }
-            else if (arguments.script) {
-                val sourcePath = arguments.freeArgs.first()
-                configuration.addKotlinSourceRoot(sourcePath)
-
-                configuration.put(JVMConfigurationKeys.RETAIN_OUTPUT_IN_MEMORY, true)
-
-                val environment = createEnvironmentWithScriptingSupport(rootDisposable, configuration, arguments, messageCollector)
-                                  ?: return COMPILATION_ERROR
-
-                val scriptDefinitionProvider = KotlinScriptDefinitionProvider.getInstance(environment.project)!!
-                val scriptFile = File(sourcePath)
-                if (scriptFile.isDirectory || !scriptDefinitionProvider.isScript(scriptFile)) {
-                    val extensionHint =
-                            if (configuration.get(JVMConfigurationKeys.SCRIPT_DEFINITIONS) == listOf(StandardScriptDefinition)) " (.kts)"
-                            else ""
-                    messageCollector.report(ERROR, "Specify path to the script file$extensionHint as the first argument")
-                    return COMPILATION_ERROR
-                }
-
-                val scriptArgs = arguments.freeArgs.subList(1, arguments.freeArgs.size)
-
-                return KotlinToJVMBytecodeCompiler.compileAndExecuteScript(environment, paths, scriptArgs)
-            }
-            else {
-                if (destination != null) {
-                    if (destination.endsWith(".jar")) {
-                        configuration.put(JVMConfigurationKeys.OUTPUT_JAR, File(destination))
+                    if (destination != null) {
+                        messageCollector.report(
+                                STRONG_WARNING,
+                                "The '-d' option with a directory destination is ignored because '-module' is specified"
+                        )
                     }
-                    else {
-                        configuration.put(JVMConfigurationKeys.OUTPUT_DIRECTORY, File(destination))
+
+                    val moduleFile = File(arguments.module)
+                    val directory = moduleFile.absoluteFile.parentFile
+
+                    KotlinToJVMBytecodeCompiler.configureSourceRoots(configuration, moduleScript.modules, directory)
+                    configuration.put(JVMConfigurationKeys.MODULE_XML_FILE, moduleFile)
+
+                    val environment = createEnvironmentWithScriptingSupport(rootDisposable, configuration, arguments, messageCollector)
+                                      ?: return COMPILATION_ERROR
+
+                    registerJavacIfNeeded(environment, arguments).let {
+                        if (!it) return COMPILATION_ERROR
                     }
+
+                    KotlinToJVMBytecodeCompiler.compileModules(environment, directory)
                 }
+                arguments.script -> {
+                    val sourcePath = arguments.freeArgs.first()
+                    configuration.addKotlinSourceRoot(sourcePath)
 
-                val environment = createEnvironmentWithScriptingSupport(rootDisposable, configuration, arguments, messageCollector)
-                                  ?: return COMPILATION_ERROR
+                    configuration.put(JVMConfigurationKeys.RETAIN_OUTPUT_IN_MEMORY, true)
 
-                registerJavacIfNeeded(environment, arguments).let {
-                    if (!it) return COMPILATION_ERROR
-                }
+                    val environment = createEnvironmentWithScriptingSupport(rootDisposable, configuration, arguments, messageCollector)
+                                      ?: return COMPILATION_ERROR
 
-                if (environment.getSourceFiles().isEmpty()) {
-                    if (arguments.version) {
-                        return OK
+                    val scriptDefinitionProvider = KotlinScriptDefinitionProvider.getInstance(environment.project)!!
+                    val scriptFile = File(sourcePath)
+                    if (scriptFile.isDirectory || !scriptDefinitionProvider.isScript(scriptFile)) {
+                        val extensionHint =
+                                if (configuration.get(JVMConfigurationKeys.SCRIPT_DEFINITIONS) == listOf(StandardScriptDefinition)) " (.kts)"
+                                else ""
+                        messageCollector.report(ERROR, "Specify path to the script file$extensionHint as the first argument")
+                        return COMPILATION_ERROR
                     }
-                    messageCollector.report(ERROR, "No source files")
-                    return COMPILATION_ERROR
+
+                    val scriptArgs = arguments.freeArgs.subList(1, arguments.freeArgs.size)
+
+                    return KotlinToJVMBytecodeCompiler.compileAndExecuteScript(environment, paths, scriptArgs)
                 }
+                else -> {
+                    if (destination != null) {
+                        if (destination.endsWith(".jar")) {
+                            configuration.put(JVMConfigurationKeys.OUTPUT_JAR, File(destination))
+                        }
+                        else {
+                            configuration.put(JVMConfigurationKeys.OUTPUT_DIRECTORY, File(destination))
+                        }
+                    }
 
-                KotlinToJVMBytecodeCompiler.compileBunchOfSources(environment)
+                    val environment = createEnvironmentWithScriptingSupport(rootDisposable, configuration, arguments, messageCollector)
+                                      ?: return COMPILATION_ERROR
 
-                compileJavaFilesIfNeeded(environment, arguments).let {
-                    if (!it) return COMPILATION_ERROR
+                    registerJavacIfNeeded(environment, arguments).let {
+                        if (!it) return COMPILATION_ERROR
+                    }
+
+                    if (environment.getSourceFiles().isEmpty()) {
+                        if (arguments.version) {
+                            return OK
+                        }
+                        messageCollector.report(ERROR, "No source files")
+                        return COMPILATION_ERROR
+                    }
+
+                    KotlinToJVMBytecodeCompiler.compileBunchOfSources(environment)
+
+                    compileJavaFilesIfNeeded(environment, arguments).let {
+                        if (!it) return COMPILATION_ERROR
+                    }
                 }
             }
 

@@ -223,23 +223,29 @@ public fun String.toIntOrNull(radix: Int): Int? {
     val limit: Int
 
     val firstChar = this[0]
-    if (firstChar < '0') {  // Possible leading sign
+    limit = if (firstChar < '0') {  // Possible leading sign
         if (length == 1) return null  // non-digit (possible sign) only, no digits after
 
         start = 1
 
-        if (firstChar == '-') {
-            isNegative = true
-            limit = Int.MIN_VALUE
-        } else if (firstChar == '+') {
-            isNegative = false
-            limit = -Int.MAX_VALUE
-        } else
-            return null
-    } else {
+        when (firstChar) {
+            '-' -> {
+                isNegative = true
+                Int.MIN_VALUE
+            }
+            '+' -> {
+                isNegative = false
+                -Int.MAX_VALUE
+            }
+            else -> {
+                return null
+            }
+        }
+    }
+    else {
         start = 0
         isNegative = false
-        limit = -Int.MAX_VALUE
+        -Int.MAX_VALUE
     }
 
 
@@ -286,23 +292,29 @@ public fun String.toLongOrNull(radix: Int): Long? {
     val limit: Long
 
     val firstChar = this[0]
-    if (firstChar < '0') {  // Possible leading sign
+    limit = if (firstChar < '0') {  // Possible leading sign
         if (length == 1) return null  // non-digit (possible sign) only, no digits after
 
         start = 1
 
-        if (firstChar == '-') {
-            isNegative = true
-            limit = Long.MIN_VALUE
-        } else if (firstChar == '+') {
-            isNegative = false
-            limit = -Long.MAX_VALUE
-        } else
-            return null
-    } else {
+        when (firstChar) {
+            '-' -> {
+                isNegative = true
+                Long.MIN_VALUE
+            }
+            '+' -> {
+                isNegative = false
+                -Long.MAX_VALUE
+            }
+            else -> {
+                return null
+            }
+        }
+    }
+    else {
         start = 0
         isNegative = false
-        limit = -Long.MAX_VALUE
+        -Long.MAX_VALUE
     }
 
 
