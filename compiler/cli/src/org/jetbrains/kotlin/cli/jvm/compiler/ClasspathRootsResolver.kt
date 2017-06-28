@@ -75,7 +75,7 @@ internal class ClasspathRootsResolver(
                     }
                 }
                 is JvmClasspathRoot -> {
-                    result += JavaRoot(root, JavaRoot.RootType.BINARY)
+                    JavaRoot(root, JavaRoot.RootType.BINARY)
                 }
                 is JvmModulePathRoot -> {
                     // TODO: sanitize the automatic module name exactly as in javac
