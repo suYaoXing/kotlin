@@ -28,9 +28,9 @@ import org.jetbrains.kotlin.js.translate.context.Namer
 
 class FunctionInlineMutator(
         private val call: JsInvocation,
-        private val inliningContext: InliningContext
+        private val inliningContext: InliningContext,
+        function: JsFunction
 ) {
-    val wrapper: JsBlock?
     private val invokedFunction: JsFunction
     val namingContext = inliningContext.newNamingContext()
     val body: JsBlock
@@ -40,10 +40,7 @@ class FunctionInlineMutator(
     private val currentStatement = inliningContext.statementContext.currentNode
 
     init {
-        val functionContext = inliningContext.functionContext
-        val (function, wrapper) = functionContext.getFunctionDefinition(call)
         invokedFunction = uncoverClosure(function.deepCopy())
-        this.wrapper = wrapper
         body = invokedFunction.body
     }
 
@@ -168,6 +165,24 @@ class FunctionInlineMutator(
     }
 
     companion object {
+        @JvmStatic fun getInlineableCallReplacement(
+                call: JsInvocation, function: JsFunction,
+                inliningContext: InliningContext
+        ): InlineableResult {
+            val mutator = FunctionInlineMutator(call, inliningContext, function)
+            mutator.process()
+
+            var inlineableBody: JsStatement = mutator.body
+            val breakLabel = mutator.breakLabel
+            if (breakLabel != null) {
+                breakLabel.statement = inlineableBody
+                inlineableBody = breakLabel
+            }
+
+            return InlineableResult(inlineableBody, mutator.resultExpr)
+        }
+
+
         @JvmStatic
         private fun getThisReplacement(call: JsInvocation): JsExpression? {
             if (isCallInvocation(call)) {

@@ -71,7 +71,7 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
             }
             lambdaCreator.name.staticRef = lambdaCreator
             lambdaCreator.fillCoroutineMetadata(invokingContext, descriptor)
-            return lambdaCreator.withCapturedParameters(descriptor, functionContext, invokingContext)
+            return lambdaCreator.withCapturedParameters(functionContext, invokingContext)
         }
 
         lambda.name = invokingContext.getInnerNameForDescriptor(descriptor)
@@ -87,7 +87,7 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
         invokingContext.addDeclarationStatement(lambda.makeStmt())
         lambda.fillCoroutineMetadata(invokingContext, descriptor)
         lambda.name.staticRef = lambda
-        return getReferenceToLambda(invokingContext, descriptor, lambda.name)
+        return JsAstUtils.pureFqn(lambda.name, null)
     }
 
     fun JsFunction.fillCoroutineMetadata(context: TranslationContext, descriptor: FunctionDescriptor) {
@@ -107,12 +107,11 @@ class LiteralFunctionTranslator(context: TranslationContext) : AbstractTranslato
 }
 
 fun JsFunction.withCapturedParameters(
-        descriptor: CallableMemberDescriptor,
         context: TranslationContext,
         invokingContext: TranslationContext
 ): JsExpression {
     context.addDeclarationStatement(makeStmt())
-    val ref = getReferenceToLambda(invokingContext, descriptor, name)
+    val ref = JsAstUtils.pureFqn(name, null)
     val invocation = JsInvocation(ref).apply { sideEffects = SideEffectKind.PURE }
 
     val invocationArguments = invocation.arguments
@@ -149,19 +148,6 @@ fun JsFunction.withCapturedParameters(
     }
 
     return invocation
-}
-
-private fun getReferenceToLambda(context: TranslationContext, descriptor: CallableMemberDescriptor, name: JsName): JsExpression {
-    return if (context.isPublicInlineFunction) {
-        val fqn = context.getQualifiedReference(descriptor)
-        if (fqn is JsNameRef) {
-            fqn.name?.let { it.staticRef = name.staticRef }
-        }
-        fqn
-    }
-    else {
-        JsAstUtils.pureFqn(name, null)
-    }
 }
 
 private data class CapturedArgsParams(val arguments: List<JsExpression> = listOf(), val parameters: List<JsParameter> = listOf())

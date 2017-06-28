@@ -55,6 +55,10 @@ public final class ReferenceTranslator {
         JsExpression alias = context.getAliasForDescriptor(descriptor);
         if (alias != null) return alias;
 
+        if (shouldTranslateAsFQN(descriptor)) {
+            return context.getQualifiedReference(descriptor);
+        }
+
         if (descriptor instanceof PropertyDescriptor) {
             PropertyDescriptor property = (PropertyDescriptor) descriptor;
             if (context.isFromCurrentModule(property) && !context.isPublicInlineFunction()) {
@@ -68,7 +72,7 @@ public final class ReferenceTranslator {
         }
 
         if (DescriptorUtils.isObject(descriptor) || DescriptorUtils.isEnumEntry(descriptor)) {
-            if (!context.isFromCurrentModule(descriptor) && !context.isPublicInlineFunction()) {
+            if (!context.isFromCurrentModule(descriptor) || context.isPublicInlineFunction()) {
                 return getLazyReferenceToObject((ClassDescriptor) descriptor, context);
             }
             else {
@@ -86,7 +90,7 @@ public final class ReferenceTranslator {
             return context.getInnerReference(descriptor);
         }
         if (DescriptorUtils.isObject(descriptor) || DescriptorUtils.isEnumEntry(descriptor)) {
-            if (!context.isFromCurrentModule(descriptor) && !context.isPublicInlineFunction()) {
+            if (!context.isFromCurrentModule(descriptor) || context.isPublicInlineFunction()) {
                 return getPrototypeIfNecessary(descriptor, getLazyReferenceToObject(descriptor, context));
             }
         }
@@ -109,6 +113,14 @@ public final class ReferenceTranslator {
         DeclarationDescriptor container = descriptor.getContainingDeclaration();
         JsExpression qualifier = context.getInnerReference(container);
         return new JsNameRef(context.getNameForDescriptor(descriptor), qualifier);
+    }
+
+    private static boolean shouldTranslateAsFQN(@NotNull DeclarationDescriptor descriptor) {
+        return isLocalVarOrFunction(descriptor);
+    }
+
+    private static boolean isLocalVarOrFunction(DeclarationDescriptor descriptor) {
+        return descriptor.getContainingDeclaration() instanceof FunctionDescriptor && !(descriptor instanceof ClassDescriptor);
     }
 
     @NotNull

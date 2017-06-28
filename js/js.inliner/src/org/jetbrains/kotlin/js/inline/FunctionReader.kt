@@ -188,16 +188,23 @@ class FunctionReader(
             offset++
         }
 
+        var markerOffset = index - 2
+        while (markerOffset > 0 && source[markerOffset].let { it.isWhitespace() || it == '(' }) {
+            markerOffset--
+        }
+        markerOffset++
+        val builderNameLength = Namer.DEFINE_INLINE_FUNCTION_BUILDER.length
+        val isBuilder = markerOffset > builderNameLength &&
+                        source.substring(markerOffset - builderNameLength, markerOffset) == Namer.DEFINE_INLINE_FUNCTION_BUILDER
+
         val position = info.offsetToSourceMapping[offset]
-        val functionOrIif = parseFunction(source, info.filePath, position, offset, ThrowExceptionOnErrorReporter, JsRootScope(JsProgram()))
-        functionOrIif.fixForwardNameReferences()
-        val function = InlineMetadata.tryExtractFunction(functionOrIif) ?: return null
-        val wrapper = if (function != functionOrIif) {
-            val body = ((functionOrIif as JsInvocation).qualifier as JsFunction).body
-            JsBlock(body.statements.filter { it !is JsReturn })
+        val functionExpr = parseFunction(source, info.filePath, position, offset, ThrowExceptionOnErrorReporter, JsRootScope(JsProgram()))
+        functionExpr.fixForwardNameReferences()
+        val (function, wrapper) = if (isBuilder) {
+            InlineMetadata.tryExtractFunction(functionExpr) ?: return null
         }
         else {
-            null
+            FunctionWithWrapper(functionExpr, null)
         }
         val moduleReference = moduleNameMap[tag] ?: currentModuleName.makeRef()
 

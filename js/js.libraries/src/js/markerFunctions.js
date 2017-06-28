@@ -25,6 +25,13 @@ Kotlin.defineInlineFunction = function(tag, fun) {
     return fun;
 };
 
+Kotlin.defineInlineFunctionBuilder = function(tag, fun) {
+    return function f() {
+        f = fun();
+        return f.apply(this, arguments);
+    };
+};
+
 Kotlin.isTypeOf = function(type) {
     return function (object) {
         return typeof object === type;

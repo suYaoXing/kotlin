@@ -159,7 +159,7 @@ abstract class BasicBoxTest(
 
             val expectedReachableNodesMatcher = EXPECTED_REACHABLE_NODES.matcher(fileContent)
             val expectedReachableNodesFound = expectedReachableNodesMatcher.find()
-            val skipMinification = System.getProperty("kotlin.js.skipMinificationTest", "false").toBoolean()
+            val skipMinification = true //System.getProperty("kotlin.js.skipMinificationTest", "false").toBoolean()
             if (!skipMinification &&
                 (runMinifierByDefault || expectedReachableNodesFound) &&
                 !SKIP_MINIFICATION.matcher(fileContent).find()

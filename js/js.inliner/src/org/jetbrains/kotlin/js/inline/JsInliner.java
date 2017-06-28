@@ -40,6 +40,8 @@ import org.jetbrains.kotlin.js.inline.util.*;
 import org.jetbrains.kotlin.resolve.inline.InlineStrategy;
 
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.flattenStatement;
 import static org.jetbrains.kotlin.js.translate.utils.JsAstUtils.pureFqn;
@@ -54,13 +56,17 @@ public class JsInliner extends JsVisitorWithContextImpl {
     private final Set<JsFunction> inProcessFunctions = CollectionUtilsKt.IdentitySet();
     private final FunctionReader functionReader;
     private final DiagnosticSink trace;
-    private final Map<String, JsName> existingImports = new HashMap<>();
+    private Map<String, JsName> existingImports = new HashMap<>();
+    private final Deque<Map<String, JsName>> existingImportsStack = new ArrayDeque<>();
 
     // these are needed for error reporting, when inliner detects cycle
     private final Stack<JsFunction> namedFunctionsStack = new Stack<>();
     private final LinkedList<JsCallInfo> inlineCallInfos = new LinkedList<>();
     private final Function1<JsNode, Boolean> canBeExtractedByInliner =
             node -> node instanceof JsInvocation && hasToBeInlined((JsInvocation) node);
+    private final Set<JsBlock> inlineWrappers = new HashSet<>();
+    private final Deque<JsContext<JsStatement>> statementContextsForInline = new ArrayDeque<>();
+    private boolean isInInlineWrapper;
 
     public static void process(
             @NotNull JsConfig.Reporter reporter,
@@ -73,6 +79,7 @@ public class JsInliner extends JsVisitorWithContextImpl {
     ) {
         Map<JsName, FunctionWithWrapper> functions = CollectUtilsKt.collectNamedFunctionsAndWrappers(fragments);
         Map<String, FunctionWithWrapper> accessors = CollectUtilsKt.collectAccessors(fragments);
+
         DummyAccessorInvocationTransformer accessorInvocationTransformer = new DummyAccessorInvocationTransformer();
         for (JsProgramFragment fragment : fragmentsToProcess) {
             accessorInvocationTransformer.accept(fragment.getDeclarationBlock());
@@ -80,7 +87,6 @@ public class JsInliner extends JsVisitorWithContextImpl {
         }
         FunctionReader functionReader = new FunctionReader(reporter, config, currentModuleName, fragments);
         JsInliner inliner = new JsInliner(config, functions, accessors, functionReader, trace);
-        List<JsNode> nodesToPostProcess = new ArrayList<>();
 
         for (JsStatement statement : importStatements) {
             inliner.processImportStatement(statement);
@@ -92,18 +98,16 @@ public class JsInliner extends JsVisitorWithContextImpl {
 
             // There can be inlined function in top-level initializers, we need to optimize them as well
             JsFunction fakeInitFunction = new JsFunction(JsDynamicScope.INSTANCE, fragment.getInitializerBlock(), "");
-            inliner.accept(new JsBlock(new JsExpressionStatement(fakeInitFunction)));
+            JsGlobalBlock initWrapper = new JsGlobalBlock();
+            initWrapper.getStatements().add(new JsExpressionStatement(fakeInitFunction));
+            inliner.accept(initWrapper);
+            initWrapper.getStatements().remove(initWrapper.getStatements().size() - 1);
 
             inliner.inliningContexts.pop();
+            fragment.getInitializerBlock().getStatements().addAll(0, initWrapper.getStatements());
             JsBlock block = new JsBlock(fragment.getDeclarationBlock(), fragment.getInitializerBlock(), fragment.getExportBlock());
-            nodesToPostProcess.add(block);
+            RemoveUnusedFunctionDefinitionsKt.removeUnusedFunctionDefinitions(block, CollectUtilsKt.collectNamedFunctions(block));
         }
-
-        Map<JsName, JsFunction> jsFunctions = new HashMap<>();
-        for (Map.Entry<JsName, FunctionWithWrapper> entry : functions.entrySet()) {
-            jsFunctions.put(entry.getKey(), entry.getValue().getFunction());
-        }
-        RemoveUnusedFunctionDefinitionsKt.removeUnusedFunctionDefinitions(nodesToPostProcess, jsFunctions);
     }
 
     private JsInliner(
@@ -118,6 +122,9 @@ public class JsInliner extends JsVisitorWithContextImpl {
         this.accessors = accessors;
         this.functionReader = functionReader;
         this.trace = trace;
+
+        Stream.concat(functions.values().stream(), accessors.values().stream())
+                .forEach(f -> inlineWrappers.add(f.getWrapperBody()));
     }
 
     private void processImportStatement(JsStatement statement) {
@@ -144,9 +151,20 @@ public class JsInliner extends JsVisitorWithContextImpl {
 
     @Override
     public boolean visit(@NotNull JsFunction function, @NotNull JsContext context) {
-        inliningContexts.push(new JsInliningContext(getLastStatementLevelContext()));
+        JsContext<JsStatement> statementContext = statementContextsForInline.isEmpty() ? getLastStatementLevelContext() :
+                                                  statementContextsForInline.peek();
+
+        inliningContexts.push(new JsInliningContext(statementContext));
         assert !inProcessFunctions.contains(function): "Inliner has revisited function";
         inProcessFunctions.add(function);
+
+        if (inlineWrappers.contains(function.getBody())) {
+            existingImportsStack.push(existingImports);
+            existingImports = new HashMap<>();
+            for (JsStatement statement : function.getBody().getStatements()) {
+                processImportStatement(statement);
+            }
+        }
 
         if (functions.values().stream().anyMatch(namedFunction -> namedFunction.getFunction().equals(function))) {
             namedFunctionsStack.push(function);
@@ -170,8 +188,33 @@ public class JsInliner extends JsVisitorWithContextImpl {
 
         inliningContexts.pop();
 
+        if (inlineWrappers.contains(function.getBody())) {
+            existingImports = existingImportsStack.pop();
+        }
+
         if (!namedFunctionsStack.empty() && namedFunctionsStack.peek() == function) {
             namedFunctionsStack.pop();
+        }
+    }
+
+    @Override
+    public boolean visit(@NotNull JsBlock x, @NotNull JsContext ctx) {
+        if (inlineWrappers.contains(x)) {
+            isInInlineWrapper = true;
+        }
+        return super.visit(x, ctx);
+    }
+
+    @Override
+    public void endVisit(@NotNull JsBlock x, @NotNull JsContext ctx) {
+        super.endVisit(x, ctx);
+        if (inlineWrappers.contains(x)) {
+            if (!isInInlineWrapper) {
+                statementContextsForInline.pop();
+            }
+            else {
+                isInInlineWrapper = false;
+            }
         }
     }
 
@@ -185,13 +228,13 @@ public class JsInliner extends JsVisitorWithContextImpl {
             inlineCallInfos.add(new JsCallInfo(call, containingFunction));
         }
 
-        JsFunction definition = getFunctionContext().getFunctionDefinition(call).getFunction();
+        FunctionWithWrapper definition = getFunctionContext().getFunctionDefinition(call);
 
-        if (inProcessFunctions.contains(definition))  {
-            reportInlineCycle(call, definition);
+        if (inProcessFunctions.contains(definition.getFunction()))  {
+            reportInlineCycle(call, definition.getFunction());
         }
-        else if (!processedFunctions.contains(definition)) {
-            accept(definition);
+        else if (!processedFunctions.contains(definition.getFunction())) {
+            accept(definition.getWrapperBody() != null ? definition.getWrapperBody() : definition.getFunction());
         }
 
         return true;
@@ -212,6 +255,15 @@ public class JsInliner extends JsVisitorWithContextImpl {
         if (lastCallInfo != null && lastCallInfo.call == x) {
             inlineCallInfos.removeLast();
         }
+    }
+
+    @Override
+    protected <T extends JsNode> void doTraverse(T node, JsContext ctx) {
+        if (isInInlineWrapper) {
+            isInInlineWrapper = false;
+            statementContextsForInline.push(ctx);
+        }
+        super.doTraverse(node, ctx);
     }
 
     @Override
@@ -240,7 +292,12 @@ public class JsInliner extends JsVisitorWithContextImpl {
         }
 
         JsInliningContext inliningContext = getInliningContext();
-        InlineableResult inlineableResult = getInlineableCallReplacement(call, inliningContext);
+        FunctionWithWrapper functionWithWrapper = inliningContext.getFunctionContext().getFunctionDefinition(call);
+        JsFunction function = functionWithWrapper.getFunction().deepCopy();
+        if (functionWithWrapper.getWrapperBody() != null) {
+            applyWrapper(functionWithWrapper.getWrapperBody(), function, inliningContext);
+        }
+        InlineableResult inlineableResult = FunctionInlineMutator.getInlineableCallReplacement(call, function, inliningContext);
 
         JsStatement inlineableBody = inlineableResult.getInlineableBody();
         JsExpression resultExpression = inlineableResult.getResultExpression();
@@ -264,70 +321,59 @@ public class JsInliner extends JsVisitorWithContextImpl {
         context.replaceMe(resultExpression);
     }
 
-    private InlineableResult getInlineableCallReplacement(@NotNull JsInvocation call, @NotNull JsInliningContext inliningContext) {
-        FunctionInlineMutator mutator = new FunctionInlineMutator(call, inliningContext);
-
-        if (mutator.getWrapper() != null) {
-            applyWrapper(mutator.getWrapper(), mutator, inliningContext);
-        }
-
-        mutator.process();
-
-        JsStatement inlineableBody = mutator.getBody();
-        JsLabel breakLabel = mutator.getBreakLabel();
-        if (breakLabel != null) {
-            breakLabel.setStatement(inlineableBody);
-            inlineableBody = breakLabel;
-        }
-
-        return new InlineableResult(inlineableBody, mutator.getResultExpr());
-    }
-
-    private void applyWrapper(@NotNull JsBlock wrapper, @NotNull FunctionInlineMutator mutator, @NotNull InliningContext inliningContext) {
+    private void applyWrapper(
+            @NotNull JsBlock wrapper, @NotNull JsFunction function,
+            @NotNull InliningContext inliningContext
+    ) {
         Map<JsName, JsExpression> replacements = new HashMap<>();
-        for (JsStatement statement : wrapper.getStatements()) {
-            if (!(statement instanceof JsReturn)) {
-                for (JsName name : CollectUtilsKt.collectDefinedNamesInAllScopes(statement)) {
-                    if (name.isTemporary() && !replacements.containsKey(name)) {
-                        JsName alias = JsScope.declareTemporaryName(name.getIdent());
-                        alias.copyMetadataFrom(name);
-                        JsExpression replacement = alias.makeRef();
-                        replacements.put(name, replacement);
-                        mutator.getNamingContext().replaceName(name, replacement);
-                    }
-                }
-            }
-        }
 
+        List<JsStatement> copiedStatements = new ArrayList<>();
         for (JsStatement statement : wrapper.getStatements()) {
             if (statement instanceof JsReturn) continue;
 
             statement = statement.deepCopy();
-            RewriteUtilsKt.replaceNames(statement, replacements);
-
             if (statement instanceof JsVars) {
                 JsVars jsVars = (JsVars) statement;
                 String tag = getImportTag(jsVars);
                 if (tag != null) {
                     JsName name = jsVars.getVars().get(0).getName();
-                    JsName existingName = MetadataProperties.getLocalAlias(name);
+                    JsName existingName = existingImportsStack.isEmpty() ? MetadataProperties.getLocalAlias(name) : null;
                     if (existingName == null) {
                         existingName = existingImports.computeIfAbsent(tag, t -> {
-                            inliningContext.getStatementContextBeforeCurrentFunction().addPrevious(jsVars.deepCopy());
+                            copiedStatements.add(jsVars);
                             return name;
                         });
                     }
 
                     if (name != existingName) {
-                        mutator.getNamingContext().replaceName(name, pureFqn(existingName, null));
+                        JsExpression replacement = pureFqn(existingName, null);
+                        replacements.put(name, replacement);
                     }
 
                     continue;
                 }
             }
 
-            inliningContext.getStatementContextBeforeCurrentFunction().addPrevious(statement);
+            copiedStatements.add(statement);
         }
+
+        List<JsName> definedNames = copiedStatements.stream()
+                .flatMap(node -> CollectUtilsKt.collectDefinedNamesInAllScopes(node).stream())
+                .filter(name -> name.isTemporary() && !replacements.containsKey(name))
+                .collect(Collectors.toList());
+        for (JsName name : definedNames) {
+            JsName alias = JsScope.declareTemporaryName(name.getIdent());
+            alias.copyMetadataFrom(name);
+            JsExpression replacement = alias.makeRef();
+            replacements.put(name, replacement);
+        }
+
+        for (JsStatement statement : copiedStatements) {
+            statement = RewriteUtilsKt.replaceNames(statement, replacements);
+            inliningContext.getStatementContextBeforeCurrentFunction().addPrevious(accept(statement));
+        }
+
+        function.setBody(RewriteUtilsKt.replaceNames(function.getBody(), replacements));
     }
 
     private static boolean isSuspendWithCurrentContinuation(@Nullable DeclarationDescriptor descriptor) {
@@ -373,8 +419,6 @@ public class JsInliner extends JsVisitorWithContextImpl {
                 if (!extractImportTagImpl(nameRef.getQualifier(), sb)) {
                     return false;
                 }
-            }
-            else {
                 sb.append('.');
             }
             sb.append(JsToStringGenerationVisitor.javaScriptString(nameRef.getIdent()));

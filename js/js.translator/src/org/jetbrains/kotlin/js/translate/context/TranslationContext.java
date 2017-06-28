@@ -395,11 +395,21 @@ public class TranslationContext {
         else {
             String tag = staticContext.getTag(descriptor);
             name = inlineFunctionContext.getImports().computeIfAbsent(tag, t -> {
+                JsExpression imported = createInlineLocalImportExpression(descriptor);
+                if (imported instanceof JsNameRef) {
+                    JsNameRef importedNameRef = (JsNameRef) imported;
+                    if (importedNameRef.getQualifier() == null && importedNameRef.getIdent().equals(Namer.getRootPackageName()) &&
+                        (descriptor instanceof PackageFragmentDescriptor || descriptor instanceof ModuleDescriptor)) {
+                        return importedNameRef.getName();
+                    }
+                }
+
                 JsName result = JsScope.declareTemporaryName(StaticContext.getSuggestedName(descriptor));
                 if (isFromCurrentModule(descriptor) && !AnnotationsUtils.isNativeObject(descriptor)) {
                     MetadataProperties.setLocalAlias(result, getInnerNameForDescriptor(descriptor));
                 }
-                JsExpression imported = createInlineLocalImportExpression(descriptor);
+                MetadataProperties.setDescriptor(result, descriptor);
+                MetadataProperties.setStaticRef(result, imported);
                 inlineFunctionContext.getImportBlock().getStatements().add(JsAstUtils.newVar(result, imported));
                 return result;
             });
@@ -427,7 +437,7 @@ public class TranslationContext {
             }
         }
 
-        return staticContext.getQualifiedReference(descriptor);
+        return getQualifiedReference(descriptor);
     }
 
     @NotNull
@@ -780,9 +790,6 @@ public class TranslationContext {
 
     public void addDeclarationStatement(@NotNull JsStatement statement) {
         if (inlineFunctionContext != null) {
-            if (!isPublicInlineFunction()) {
-                staticContext.getDeclarationStatements().add(statement);
-            }
             inlineFunctionContext.getDeclarationsBlock().getStatements().add(statement);
         }
         else {
@@ -817,15 +824,10 @@ public class TranslationContext {
     }
 
     public boolean isPublicInlineFunction() {
-        DeclarationDescriptor descriptor = declarationDescriptor;
-        while (descriptor instanceof FunctionDescriptor) {
-            FunctionDescriptor function = (FunctionDescriptor) descriptor;
-            if (function.isInline() && DescriptorUtilsKt.isEffectivelyPublicApi(function)) {
-                return true;
-            }
-            descriptor = descriptor.getContainingDeclaration();
-        }
-        return false;
+        if (inlineFunctionContext == null) return false;
+
+        CallableDescriptor function = inlineFunctionContext.getDescriptor();
+        return function.getVisibility().effectiveVisibility(function, true).getPublicApi();
     }
 
     @Nullable

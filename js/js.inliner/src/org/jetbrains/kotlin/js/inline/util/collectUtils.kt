@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.js.inline.util
 
 import org.jetbrains.kotlin.js.backend.ast.*
-import org.jetbrains.kotlin.js.backend.ast.metadata.owningInlineFunction
 import org.jetbrains.kotlin.js.backend.ast.metadata.staticRef
 import org.jetbrains.kotlin.js.inline.util.collectors.InstanceCollector
 import org.jetbrains.kotlin.js.translate.expression.InlineMetadata
@@ -127,6 +126,7 @@ fun collectDefinedNamesInAllScopes(scope: JsNode): Set<JsName> {
         override fun visitFunction(x: JsFunction) {
             super.visitFunction(x)
             x.name?.let { names += it }
+            names += x.parameters.map { it.name }
         }
     }.accept(scope)
 
@@ -161,7 +161,6 @@ fun collectNamedFunctionsAndWrappers(fragments: List<JsProgramFragment>): Map<Js
 
 fun collectNamedFunctionsAndMetadata(scope: JsNode): Map<JsName, Pair<FunctionWithWrapper, JsExpression>> {
     val namedFunctions = mutableMapOf<JsName, Pair<FunctionWithWrapper, JsExpression>>()
-    val relatedDeclarations = mutableMapOf<JsFunction, MutableList<JsStatement>>()
 
     scope.accept(object : RecursiveJsVisitor() {
         override fun visitBinaryExpression(x: JsBinaryOperation) {
@@ -198,24 +197,9 @@ fun collectNamedFunctionsAndMetadata(scope: JsNode): Map<JsName, Pair<FunctionWi
             }
             super.visitFunction(x)
         }
-
-        override fun visitElement(node: JsNode) {
-            super.visitElement(node)
-            if (node is JsStatement) {
-                val function = node.owningInlineFunction
-                if (function != null) {
-                    relatedDeclarations.getOrPut(function, ::mutableListOf) += node
-                }
-            }
-        }
     })
 
-    return namedFunctions.mapValues { (_, v) ->
-        val (funWithWrapper, metadata) = v
-        val wrapper = funWithWrapper.wrapperBody ?: relatedDeclarations[funWithWrapper.function]?.let { JsBlock(it) }
-        val newFunWithWrapper = funWithWrapper.copy(wrapperBody = wrapper)
-        Pair(newFunWithWrapper, metadata)
-    }
+    return namedFunctions
 }
 
 data class FunctionWithWrapper(val function: JsFunction, val wrapperBody: JsBlock?)
@@ -226,9 +210,7 @@ fun collectAccessors(scope: JsNode): Map<String, FunctionWithWrapper> {
     scope.accept(object : RecursiveJsVisitor() {
         override fun visitInvocation(invocation: JsInvocation) {
             InlineMetadata.decompose(invocation)?.let {
-                extractFunction(it.callExpression)?.let { function ->
-                    accessors[it.tag.value] = function
-                }
+                accessors[it.tag.value] = it.function
             }
             super.visitInvocation(invocation)
         }
@@ -247,16 +229,7 @@ fun collectAccessors(fragments: List<JsProgramFragment>): Map<String, FunctionWi
 
 private fun extractFunction(expression: JsExpression) = when (expression) {
     is JsFunction -> FunctionWithWrapper(expression, null)
-    else -> {
-        val inlineMetadata = InlineMetadata.decompose(expression)
-        if (inlineMetadata != null) {
-            val callExpression = ((inlineMetadata.callExpression as? JsInvocation)?.qualifier as? JsFunction)?.body
-            FunctionWithWrapper(inlineMetadata.function, callExpression)
-        }
-        else {
-            null
-        }
-    }
+    else -> InlineMetadata.decompose(expression)?.function
 }
 
 fun <T : JsNode> collectInstances(klass: Class<T>, scope: JsNode): List<T> {

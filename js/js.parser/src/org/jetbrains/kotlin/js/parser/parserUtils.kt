@@ -31,19 +31,16 @@ fun parse(code: String, reporter: ErrorReporter, scope: JsScope, fileName: Strin
     }
 }
 
-fun parseFunction(code: String, fileName: String, position: CodePosition, offset: Int, reporter: ErrorReporter, scope: JsScope): JsExpression {
-    val observer = FunctionParsingObserver()
+fun parseFunction(code: String, fileName: String, position: CodePosition, offset: Int, reporter: ErrorReporter, scope: JsScope): JsFunction {
     val rootNode = parse(code, position, offset, reporter, insideFunction = false) {
-        addListener(observer)
+        addListener(FunctionParsingObserver())
         primaryExpr(it)
     }
-    val jsFunction = rootNode.toJsAst(scope, fileName, JsAstMapper::mapFunction)
-    return if (observer.immediatelyInvoked) JsInvocation(jsFunction) else jsFunction
+    return rootNode.toJsAst(scope, fileName, JsAstMapper::mapFunction)
 }
 
 private class FunctionParsingObserver : ParserListener {
     var functionsStarted = 0
-    var immediatelyInvoked = false
 
     override fun functionStarted() {
         functionsStarted++
@@ -51,10 +48,6 @@ private class FunctionParsingObserver : ParserListener {
 
     override fun functionEnded(tokenStream: TokenStream) {
         if (--functionsStarted == 0) {
-            if (tokenStream.token == TokenStream.LP) {
-                immediatelyInvoked = true
-            }
-
             tokenStream.ungetToken(TokenStream.EOF)
         }
     }

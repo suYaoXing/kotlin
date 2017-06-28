@@ -22,27 +22,27 @@ class NameReplacingVisitor(private val replaceMap: Map<JsName, JsExpression>) : 
 
     override fun endVisit(x: JsNameRef, ctx: JsContext<JsNode>) {
         val replacement = replaceMap[x.name] ?: return
-        ctx.replaceMe(replacement.deepCopy().source(x.source))
+        val replacementCopy = accept(replacement.deepCopy().source(x.source))
+        ctx.replaceMe(replacementCopy)
     }
 
-    override fun endVisit(x: JsVars.JsVar, ctx: JsContext<JsNode>) {
-        val replacement = replaceMap[x.name]
-        if (replacement is HasName) {
-            x.name = replacement.name
-        }
-    }
+    override fun endVisit(x: JsVars.JsVar, ctx: JsContext<*>) = applyToNamedNode(x)
 
-    override fun endVisit(x: JsLabel, ctx: JsContext<JsNode>) {
-        val replacement = replaceMap[x.name]
-        if (replacement is HasName) {
-            x.name = replacement.name
-        }
-    }
+    override fun endVisit(x: JsLabel, ctx: JsContext<*>) = applyToNamedNode(x)
 
-    override fun endVisit(x: JsFunction, ctx: JsContext<JsNode>) {
-        val replacement = replaceMap[x.name]
-        if (replacement is HasName) {
-            x.name = replacement.name
+    override fun endVisit(x: JsFunction, ctx: JsContext<*>) = applyToNamedNode(x)
+
+    override fun endVisit(x: JsParameter, ctx: JsContext<*>) = applyToNamedNode(x)
+
+    private fun applyToNamedNode(x: HasName) {
+        while (true) {
+            val replacement = replaceMap[x.name]
+            if (replacement is HasName) {
+                x.name = replacement.name
+            }
+            else {
+                break
+            }
         }
     }
 }

@@ -14,13 +14,17 @@ import java.util.List;
  */
 public class JsGlobalBlock extends JsBlock {
 
-  public JsGlobalBlock() {
-  }
+    public JsGlobalBlock() {
+    }
 
-  @Override
-  public boolean isGlobalBlock() {
-    return true;
-  }
+    public JsGlobalBlock(@NotNull List<JsStatement> statements) {
+        super(statements);
+    }
+
+    @Override
+    public boolean isGlobalBlock() {
+        return true;
+    }
 
     @NotNull
     @Override

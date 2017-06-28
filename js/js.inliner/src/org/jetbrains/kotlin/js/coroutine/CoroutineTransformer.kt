@@ -41,7 +41,7 @@ class CoroutineTransformer() : JsVisitorWithContextImpl() {
         val assignment = JsAstUtils.decomposeAssignment(expression)
         if (assignment != null) {
             val (lhs, rhs) = assignment
-            val function = rhs as? JsFunction ?: InlineMetadata.decompose(rhs)?.function
+            val function = rhs as? JsFunction ?: InlineMetadata.decompose(rhs)?.function?.function
             if (function?.coroutineMetadata != null) {
                 val name = ((lhs as? JsNameRef)?.name ?: function.name)?.ident
                 additionalStatementsByNode[x] = CoroutineFunctionTransformer(function, name).transform()
@@ -60,7 +60,7 @@ class CoroutineTransformer() : JsVisitorWithContextImpl() {
     override fun visit(x: JsVars.JsVar, ctx: JsContext<*>): Boolean {
         val initExpression = x.initExpression
         if (initExpression != null) {
-            val function = initExpression as? JsFunction ?: InlineMetadata.decompose(initExpression)?.function
+            val function = initExpression as? JsFunction ?: InlineMetadata.decompose(initExpression)?.function?.function
             if (function?.coroutineMetadata != null) {
                 val name = x.name.ident
                 additionalStatementsByNode[x] = CoroutineFunctionTransformer(function, name).transform()
