@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.stubs.KotlinImportDirectiveStub;
 import org.jetbrains.kotlin.psi.stubs.elements.KtStubElementTypes;
+import org.jetbrains.kotlin.resolve.Import;
 import org.jetbrains.kotlin.resolve.ImportPath;
 
 public class KtImportDirective extends KtElementImplStub<KotlinImportDirectiveStub> {
