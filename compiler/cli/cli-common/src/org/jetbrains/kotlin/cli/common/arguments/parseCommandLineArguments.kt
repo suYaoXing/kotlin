@@ -73,7 +73,7 @@ fun <A : CommonToolArguments> parseCommandLineArguments(args: Array<out String>,
         }
 
         if (argument.value == arg) {
-            if (argument.isAdvanced) {
+            if (argument.isAdvanced && field.type != Boolean::class.java) {
                 errors.extraArgumentsPassedInObsoleteForm.add(arg)
             }
             return true
