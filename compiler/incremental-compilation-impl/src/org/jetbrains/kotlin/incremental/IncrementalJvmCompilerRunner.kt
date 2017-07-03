@@ -32,7 +32,6 @@ import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
 import org.jetbrains.kotlin.modules.TargetId
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.progress.CompilationCanceledStatus
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
 import java.io.File
 import java.util.*
@@ -61,11 +60,6 @@ fun makeIncrementally(
     }
 }
 
-object EmptyICReporter : ICReporter {
-    override fun report(message: ()->String) {
-    }
-}
-
 inline fun <R> withIC(fn: ()->R): R {
     val isEnabledBackup = IncrementalCompilation.isEnabled()
     IncrementalCompilation.setIsEnabled(true)
@@ -88,7 +82,7 @@ class IncrementalJvmCompilerRunner(
         changesRegistry: ChangesRegistry? = null
 ) : IncrementalCompilerRunner<K2JVMCompilerArguments, IncrementalJvmCachesManager>(
         workingDir,
-        CACHES_DIR_NAME,
+        "caches-jvm",
         cacheVersions,
         reporter,
         artifactChangesProvider,
@@ -291,10 +285,6 @@ class IncrementalJvmCompilerRunner(
             args.destination = destination
             moduleFile.delete()
         }
-    }
-
-    companion object {
-        const val CACHES_DIR_NAME = "caches"
     }
 }
 
