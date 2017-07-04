@@ -22,7 +22,9 @@ import com.intellij.util.containers.SLRUCache
 import org.jetbrains.kotlin.builtins.isFunctionTypeOrSubtype
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.js.backend.ast.*
+import org.jetbrains.kotlin.js.backend.ast.metadata.SideEffectKind
 import org.jetbrains.kotlin.js.backend.ast.metadata.inlineStrategy
+import org.jetbrains.kotlin.js.backend.ast.metadata.sideEffects
 import org.jetbrains.kotlin.js.config.JsConfig
 import org.jetbrains.kotlin.js.inline.util.*
 import org.jetbrains.kotlin.js.parser.OffsetToSourceMapping
@@ -188,20 +190,17 @@ class FunctionReader(
             offset++
         }
 
-        var markerOffset = index - 2
-        while (markerOffset > 0 && source[markerOffset].let { it.isWhitespace() || it == '(' }) {
-            markerOffset--
+        val wrapFunctionMatcher = wrapFunctionRegex.matcher(ShallowSubSequence(source, offset, source.length))
+        val isWrapped = wrapFunctionMatcher.lookingAt()
+        if (isWrapped) {
+            offset += wrapFunctionMatcher.end()
         }
-        markerOffset++
-        val builderNameLength = Namer.DEFINE_INLINE_FUNCTION_BUILDER.length
-        val isBuilder = markerOffset > builderNameLength &&
-                        source.substring(markerOffset - builderNameLength, markerOffset) == Namer.DEFINE_INLINE_FUNCTION_BUILDER
 
         val position = info.offsetToSourceMapping[offset]
         val functionExpr = parseFunction(source, info.filePath, position, offset, ThrowExceptionOnErrorReporter, JsRootScope(JsProgram()))
         functionExpr.fixForwardNameReferences()
-        val (function, wrapper) = if (isBuilder) {
-            InlineMetadata.tryExtractFunction(functionExpr) ?: return null
+        val (function, wrapper) = if (isWrapped) {
+            InlineMetadata.decomposeWrapper(functionExpr) ?: return null
         }
         else {
             FunctionWithWrapper(functionExpr, null)
@@ -220,6 +219,18 @@ class FunctionReader(
         replaceExternalNames(function, replacements)
         wrapper?.let { replaceExternalNames(it, replacements) }
         function.markInlineArguments(descriptor)
+
+        val namesWithoutSizeEffects = wrapper?.statements.orEmpty().asSequence()
+                .flatMap { collectDefinedNames(it).asSequence() }
+                .toSet()
+        function.accept(object : RecursiveJsVisitor() {
+            override fun visitNameRef(nameRef: JsNameRef) {
+                if (nameRef.name in namesWithoutSizeEffects && nameRef.qualifier == null) {
+                    nameRef.sideEffects = SideEffectKind.PURE
+                }
+                super.visitNameRef(nameRef)
+            }
+        })
 
         return FunctionWithWrapper(function, wrapper)
     }
@@ -276,4 +287,18 @@ private fun replaceExternalNames(node: JsNode, replacements: Map<String, JsExpre
     }
 
     visitor.accept(node)
+}
+
+private val wrapFunctionRegex = Regex("\\s*[a-zA-Z_$][a-zA-Z0-9_$]*\\s*\\.\\s*wrapFunction\\s*\\(\\s*").toPattern()
+
+private class ShallowSubSequence(private val underlying: CharSequence, private val start: Int, end: Int) : CharSequence {
+    override val length: Int = end - start
+
+    override fun get(index: Int): Char {
+        if (index !in 0 until length) throw IndexOutOfBoundsException("$index is out of bounds 0..$length")
+        return underlying[index + start]
+    }
+
+    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
+            ShallowSubSequence(underlying, start + startIndex, start + endIndex)
 }
