@@ -200,7 +200,7 @@ enum class LibraryJarDescriptor(val jarName: String,
         return LibraryUtils.getJarFile(Arrays.asList(*library.getFiles(orderRootType)), jarName)
     }
 
-    fun getPathInPlugin() = getPath(PathUtil.getKotlinPathsForIdeaPlugin())
+    fun getPathInPlugin() = getPath(PathUtil.kotlinPathsForIdeaPlugin)
 }
 
 fun bundledRuntimeVersion(): String {
@@ -208,7 +208,7 @@ fun bundledRuntimeVersion(): String {
 }
 
 private val bundledRuntimeBuildNumber: String? by lazy {
-    val file = PathUtil.getKotlinPathsForIdeaPlugin().buildNumberFile
+    val file = PathUtil.kotlinPathsForIdeaPlugin.buildNumberFile
     if (file.exists()) file.readText().trim() else null
 }
 

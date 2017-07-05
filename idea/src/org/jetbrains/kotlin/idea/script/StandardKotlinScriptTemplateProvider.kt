@@ -69,7 +69,7 @@ class BundledKotlinScriptDependenciesResolver : ScriptDependenciesResolver {
 
 class KotlinBundledScriptDependencies(override val javaHome: String?) : KotlinScriptExternalDependencies {
     override val classpath: Iterable<File> get() {
-        return with(PathUtil.getKotlinPathsForIdeaPlugin()) {
+        return with(PathUtil.kotlinPathsForIdeaPlugin) {
             listOf(
                     reflectPath,
                     stdlibPath,

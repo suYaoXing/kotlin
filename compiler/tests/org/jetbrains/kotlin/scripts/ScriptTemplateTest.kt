@@ -19,7 +19,6 @@ package org.jetbrains.kotlin.scripts
 import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.*
-import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler
@@ -27,7 +26,10 @@ import org.jetbrains.kotlin.codegen.CompilationException
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.config.addKotlinSourceRoot
 import org.jetbrains.kotlin.daemon.toFile
-import org.jetbrains.kotlin.script.*
+import org.jetbrains.kotlin.script.InvalidScriptResolverAnnotation
+import org.jetbrains.kotlin.script.KotlinScriptDefinition
+import org.jetbrains.kotlin.script.KotlinScriptDefinitionFromAnnotatedTemplate
+import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestJdkKind
@@ -282,7 +284,7 @@ class ScriptTemplateTest {
             suppressOutput: Boolean,
             includeKotlinRuntime: Boolean): Class<*>?
     {
-        val paths = PathUtil.getKotlinPathsForDistDirectory()
+        val paths = PathUtil.kotlinPathsForDistDirectory
         val messageCollector =
                 if (suppressOutput) MessageCollector.NONE
                 else PrintingMessageCollector(System.err, MessageRenderer.PLAIN_FULL_PATHS, false)
@@ -342,7 +344,7 @@ open class TestKotlinScriptDummyDependenciesResolver : ScriptDependenciesResolve
 
 class TestKotlinScriptDependenciesResolver : TestKotlinScriptDummyDependenciesResolver() {
 
-    private val kotlinPaths by lazy { PathUtil.getKotlinPathsForCompiler() }
+    private val kotlinPaths by lazy { PathUtil.kotlinPathsForCompiler }
 
     @AcceptedAnnotations(DependsOn::class, DependsOnTwo::class)
     override fun resolve(script: ScriptContents,

@@ -19,7 +19,6 @@ package org.jetbrains.kotlin.scripts
 import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.*
-import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler
@@ -28,6 +27,7 @@ import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.config.addKotlinSourceRoot
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import org.jetbrains.kotlin.script.StandardScriptDefinition
+import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestJdkKind
@@ -97,7 +97,7 @@ class ScriptTest : KtUsefulTestCase() {
             suppressOutput: Boolean,
             saveClassesDir: File? = null): Class<*>?
     {
-        val paths = PathUtil.getKotlinPathsForDistDirectory()
+        val paths = PathUtil.kotlinPathsForDistDirectory
         val messageCollector =
                 if (suppressOutput) MessageCollector.NONE
                 else PrintingMessageCollector(System.err, MessageRenderer.PLAIN_FULL_PATHS, false)
