@@ -30,12 +30,14 @@ import org.jetbrains.kotlin.js.backend.ast.metadata.SideEffectKind;
 import org.jetbrains.kotlin.js.config.JsConfig;
 import org.jetbrains.kotlin.js.naming.NameSuggestionKt;
 import org.jetbrains.kotlin.js.naming.SuggestedName;
+import org.jetbrains.kotlin.js.translate.declaration.ClassModelGenerator;
 import org.jetbrains.kotlin.js.translate.intrinsic.Intrinsics;
 import org.jetbrains.kotlin.js.translate.reference.CallExpressionTranslator;
 import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator;
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils;
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils;
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils;
+import org.jetbrains.kotlin.js.translate.utils.UtilsKt;
 import org.jetbrains.kotlin.name.Name;
 import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.resolve.BindingContext;
@@ -813,7 +815,17 @@ public class TranslationContext {
     }
 
     public void addClass(@NotNull ClassDescriptor classDescriptor) {
-        staticContext.addClass(classDescriptor);
+        if (inlineFunctionContext != null) {
+            JsClassModel classModel = new ClassModelGenerator(this).generateClassModel(classDescriptor);
+            List<JsStatement> targetStatements = inlineFunctionContext.getPrototypeBlock().getStatements();
+            if (classModel.getSuperName() != null) {
+                targetStatements.addAll(UtilsKt.createPrototypeStatements(classModel.getSuperName(), classModel.getName()));
+            }
+            targetStatements.addAll(classModel.getPostDeclarationBlock().getStatements());
+        }
+        else {
+            staticContext.addClass(classDescriptor);
+        }
     }
 
     public void export(@NotNull MemberDescriptor descriptor) {

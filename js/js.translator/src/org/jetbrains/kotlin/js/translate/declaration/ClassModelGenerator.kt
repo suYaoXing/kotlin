@@ -22,7 +22,6 @@ import org.jetbrains.kotlin.backend.common.bridges.generateBridgesForFunctionDes
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.js.backend.ast.*
 import org.jetbrains.kotlin.js.translate.context.Namer
-import org.jetbrains.kotlin.js.translate.context.StaticContext
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 import org.jetbrains.kotlin.js.translate.utils.JsAstUtils
@@ -33,12 +32,11 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasOrInheritsParametersWithDefaultValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasOwnParametersWithDefaultValue
-import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.utils.identity
 
-class ClassModelGenerator(val context: StaticContext) {
+class ClassModelGenerator(val context: TranslationContext) {
     fun generateClassModel(descriptor: ClassDescriptor): JsClassModel {
         val superName = descriptor.getSuperClassNotAny()?.let { context.getInnerNameForDescriptor(it) }
         val model = JsClassModel(context.getInnerNameForDescriptor(descriptor), superName)
@@ -207,12 +205,11 @@ class ClassModelGenerator(val context: StaticContext) {
     }
 
     private fun generateBridgesToTraitImpl(descriptor: ClassDescriptor, model: JsClassModel) {
-        val translationContext = TranslationContext.rootContext(context)
         for ((key, value) in CodegenUtil.getNonPrivateTraitMethods(descriptor)) {
             val sourceName = context.getNameForDescriptor(key).ident
             val targetName = context.getNameForDescriptor(value).ident
             if (sourceName != targetName) {
-                val statement = generateDelegateCall(descriptor, key, value, JsThisRef(), translationContext, false,
+                val statement = generateDelegateCall(descriptor, key, value, JsThisRef(), context, false,
                                                      descriptor.source.getPsi())
                 model.postDeclarationBlock.statements += statement
             }
@@ -248,9 +245,8 @@ class ClassModelGenerator(val context: StaticContext) {
             if (fromDescriptor.kind.isReal && fromDescriptor.modality != Modality.ABSTRACT && !toDescriptor.kind.isReal) return
         }
 
-        val translationContext = TranslationContext.rootContext(context)
         model.postDeclarationBlock.statements += generateDelegateCall(descriptor, fromDescriptor, toDescriptor, JsThisRef(),
-                                                                      translationContext, false, descriptor.source.getPsi())
+                                                                      context, false, descriptor.source.getPsi())
     }
 
     private fun copyMethod(
@@ -260,7 +256,7 @@ class ClassModelGenerator(val context: StaticContext) {
             targetDescriptor: ClassDescriptor,
             block: JsBlock
     ) {
-        if (targetDescriptor.module != context.currentModule) return
+        if (!context.isFromCurrentModule(targetDescriptor)) return
 
         val targetPrototype = prototypeOf(pureFqn(context.getInnerNameForDescriptor(targetDescriptor), null))
         val sourcePrototype = prototypeOf(pureFqn(context.getInnerNameForDescriptor(sourceDescriptor), null))
@@ -275,7 +271,7 @@ class ClassModelGenerator(val context: StaticContext) {
             targetDescriptor: ClassDescriptor,
             block: JsBlock
     ) {
-        if (targetDescriptor.module != context.currentModule) return
+        if (!context.isFromCurrentModule(targetDescriptor)) return
 
         val targetPrototype = prototypeOf(pureFqn(context.getInnerNameForDescriptor(targetDescriptor), null))
         val sourcePrototype = prototypeOf(pureFqn(context.getInnerNameForDescriptor(sourceDescriptor), null))

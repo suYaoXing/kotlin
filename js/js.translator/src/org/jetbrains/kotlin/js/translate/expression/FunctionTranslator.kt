@@ -97,15 +97,20 @@ fun TranslationContext.translateFunction(declaration: KtDeclarationWithBody, fun
 }
 
 fun TranslationContext.wrapWithInlineMetadata(function: JsFunction, descriptor: FunctionDescriptor): JsExpression {
-    return if (shouldBeInlined(descriptor, this) && descriptor.isEffectivelyPublicApi) {
+    val isInline = shouldBeInlined(descriptor, this)
+    return if (isInline && descriptor.isEffectivelyPublicApi) {
         val metadata = InlineMetadata.compose(function, descriptor, this)
         metadata.functionWithMetadata
     }
     else {
-        val statements = inlineFunctionContext?.let {
-            it.importBlock.statements + it.declarationsBlock.statements
+        val statements = if (isInline) {
+            inlineFunctionContext!!.let {
+                it.importBlock.statements + it.prototypeBlock.statements + it.declarationsBlock.statements
+            }
+        } else {
+            listOf()
         }
-        val block = if (statements != null && statements.isNotEmpty()) JsBlock(statements + JsReturn(function)) else null
+        val block = if (statements.isNotEmpty()) JsBlock(statements + JsReturn(function)) else null
         InlineMetadata.wrapFunction(FunctionWithWrapper(function, block))
     }
 }

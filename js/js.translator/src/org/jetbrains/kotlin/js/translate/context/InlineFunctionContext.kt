@@ -23,5 +23,6 @@ import org.jetbrains.kotlin.js.backend.ast.JsName
 class InlineFunctionContext(val descriptor: CallableDescriptor) {
     val imports = mutableMapOf<String, JsName>()
     val importBlock = JsGlobalBlock()
+    val prototypeBlock = JsGlobalBlock()
     val declarationsBlock = JsGlobalBlock()
 }
