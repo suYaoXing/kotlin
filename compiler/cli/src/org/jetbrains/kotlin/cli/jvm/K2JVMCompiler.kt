@@ -50,7 +50,6 @@ import org.jetbrains.kotlin.script.KotlinScriptDefinitionProvider
 import org.jetbrains.kotlin.script.StandardScriptDefinition
 import org.jetbrains.kotlin.util.PerformanceCounter
 import org.jetbrains.kotlin.utils.KotlinPaths
-import org.jetbrains.kotlin.utils.KotlinPathsFromHomeDir
 import org.jetbrains.kotlin.utils.PathUtil
 import java.io.File
 import java.lang.management.ManagementFactory
@@ -59,17 +58,15 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 
 class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
-    override fun doExecute(arguments: K2JVMCompilerArguments, configuration: CompilerConfiguration, rootDisposable: Disposable): ExitCode {
-        val messageCollector = configuration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
-
-        val paths = if (arguments.kotlinHome != null)
-            KotlinPathsFromHomeDir(File(arguments.kotlinHome))
-        else
-            PathUtil.kotlinPathsForCompiler
-
-        messageCollector.report(LOGGING, "Using Kotlin home directory ${paths.homePath}")
+    override fun doExecute(
+            arguments: K2JVMCompilerArguments,
+            configuration: CompilerConfiguration,
+            rootDisposable: Disposable,
+            paths: KotlinPaths?
+    ): ExitCode {
         PerformanceCounter.setTimeCounterEnabled(arguments.reportPerf)
 
+        val messageCollector = configuration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
         setupJdkClasspathRoots(arguments, configuration, messageCollector).let {
             if (it != OK) return it
         }
@@ -106,7 +103,7 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
             }
         }
 
-        val classpath = getClasspath(paths, arguments)
+        val classpath = getClasspath(paths, arguments, messageCollector)
         configuration.addJvmClasspathRoots(classpath)
         for (modularRoot in arguments.javaModulePath?.split(File.pathSeparatorChar).orEmpty()) {
             configuration.add(JVMConfigurationKeys.CONTENT_ROOTS, JvmModulePathRoot(File(modularRoot)))
@@ -197,6 +194,11 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
 
                 val scriptArgs = arguments.freeArgs.subList(1, arguments.freeArgs.size)
 
+                if (paths == null) {
+                    // TODO: support "-no-stdlib" here as well
+                    messageCollector.report(ERROR, "Script execution is not possible without the valid Kotlin home directory")
+                    return COMPILATION_ERROR
+                }
                 return KotlinToJVMBytecodeCompiler.compileAndExecuteScript(environment, paths, scriptArgs)
             }
             else {
@@ -379,19 +381,22 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
             arguments.declarationsOutputPath?.let { configuration.put(JVMConfigurationKeys.DECLARATIONS_JSON_PATH, it) }
         }
 
-        private fun getClasspath(paths: KotlinPaths, arguments: K2JVMCompilerArguments): List<File> {
+        private fun getClasspath(paths: KotlinPaths?, arguments: K2JVMCompilerArguments, messageCollector: MessageCollector): List<File> {
             val classpath = arrayListOf<File>()
             if (arguments.classpath != null) {
                 classpath.addAll(arguments.classpath.split(File.pathSeparatorChar).map(::File))
             }
             if (!arguments.noStdlib) {
-                classpath.add(paths.runtimePath)
-                classpath.add(paths.scriptRuntimePath)
+                getLibraryFromHome(paths, KotlinPaths::getStdlibPath, PathUtil.KOTLIN_JAVA_STDLIB_JAR, messageCollector, "'-no-stdlib'")
+                        ?.let(classpath::add)
+                getLibraryFromHome(paths, KotlinPaths::getScriptRuntimePath, PathUtil.KOTLIN_JAVA_SCRIPT_RUNTIME_JAR, messageCollector, "'-no-stdlib'")
+                        ?.let(classpath::add)
             }
             // "-no-stdlib" implies "-no-reflect": otherwise we would be able to transitively read stdlib classes through kotlin-reflect,
             // which is likely not what user wants since s/he manually provided "-no-stdlib"
             if (!arguments.noReflect && !arguments.noStdlib) {
-                classpath.add(paths.reflectPath)
+                getLibraryFromHome(paths, KotlinPaths::getReflectPath, PathUtil.KOTLIN_JAVA_REFLECT_JAR, messageCollector, "'-no-reflect' or '-no-stdlib'")
+                        ?.let(classpath::add)
             }
             return classpath
         }
