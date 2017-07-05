@@ -704,14 +704,14 @@ class GradleFacetImportTest : GradleImportingTestCase() {
             apply plugin: 'kotlin-platform-jvm'
 
             compileKotlin {
-                kotlinOptions.freeCompilerArgs = ["-Xbuild-file", "module with spaces"]
+                kotlinOptions.freeCompilerArgs = ["-module", "module with spaces"]
             }
         """)
         importProject()
 
         with (facetSettings) {
             Assert.assertEquals(
-                    listOf("-Xbuild-file", "module with spaces"),
+                    listOf("-Xbuild-file=module with spaces"),
                     compilerSettings!!.additionalArgumentsAsList
             )
         }
