@@ -4736,6 +4736,12 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
             doTest(fileName);
         }
 
+        @TestMetadata("internalNameClash.kt")
+        public void testInternalNameClash() throws Exception {
+            String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/inlineMultiModule/internalNameClash.kt");
+            doTest(fileName);
+        }
+
         @TestMetadata("keywordAsMemberName.kt")
         public void testKeywordAsMemberName() throws Exception {
             String fileName = KotlinTestUtils.navigationMetadata("js/js.translator/testData/box/inlineMultiModule/keywordAsMemberName.kt");

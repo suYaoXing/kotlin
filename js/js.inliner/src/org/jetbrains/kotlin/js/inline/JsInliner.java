@@ -378,7 +378,10 @@ public class JsInliner extends JsVisitorWithContextImpl {
                     if (existingName == null) {
                         existingName = existingImports.computeIfAbsent(tag, t -> {
                             copiedStatements.add(jsVars);
-                            return name;
+                            JsName alias = JsScope.declareTemporaryName(name.getIdent());
+                            alias.copyMetadataFrom(name);
+                            replacements.put(name, pureFqn(alias, null));
+                            return alias;
                         });
                     }
 
@@ -394,10 +397,10 @@ public class JsInliner extends JsVisitorWithContextImpl {
             copiedStatements.add(statement);
         }
 
-        List<JsName> definedNames = copiedStatements.stream()
+        Set<JsName> definedNames = copiedStatements.stream()
                 .flatMap(node -> CollectUtilsKt.collectDefinedNamesInAllScopes(node).stream())
-                .filter(name -> name.isTemporary() && !replacements.containsKey(name))
-                .collect(Collectors.toList());
+                .filter(name -> !replacements.containsKey(name))
+                .collect(Collectors.toSet());
         for (JsName name : definedNames) {
             JsName alias = JsScope.declareTemporaryName(name.getIdent());
             alias.copyMetadataFrom(name);
@@ -410,7 +413,7 @@ public class JsInliner extends JsVisitorWithContextImpl {
             inliningContext.getStatementContextBeforeCurrentFunction().addPrevious(accept(statement));
         }
 
-        function.setBody(RewriteUtilsKt.replaceNames(function.getBody(), replacements));
+        RewriteUtilsKt.replaceNames(function, replacements);
     }
 
     private static boolean isSuspendWithCurrentContinuation(@Nullable DeclarationDescriptor descriptor) {
