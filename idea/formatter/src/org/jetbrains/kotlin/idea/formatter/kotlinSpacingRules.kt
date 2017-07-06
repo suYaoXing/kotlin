@@ -58,6 +58,15 @@ fun createSpacingBuilder(settings: CodeStyleSettings, builderUtil: KotlinSpacing
         val DECLARATIONS =
                 TokenSet.create(PROPERTY, FUN, CLASS, OBJECT_DECLARATION, ENUM_ENTRY, SECONDARY_CONSTRUCTOR, CLASS_INITIALIZER)
 
+        simple {
+            before(FILE_ANNOTATION_LIST).lineBreakInCode()
+            after(FILE_ANNOTATION_LIST).blankLines(1)
+
+            after(PACKAGE_DIRECTIVE).blankLines(1)
+            between(IMPORT_DIRECTIVE, IMPORT_DIRECTIVE).lineBreakInCode()
+            after(IMPORT_LIST).blankLines(1)
+        }
+
         custom {
             inPosition(parent = null, left = EOL_COMMENT, right = EOL_COMMENT).customRule { _, _, right ->
                 val nodeBeforeRight = right.node.treePrev
@@ -116,13 +125,6 @@ fun createSpacingBuilder(settings: CodeStyleSettings, builderUtil: KotlinSpacing
 
         simple {
             // ============ Line breaks ==============
-            before(FILE_ANNOTATION_LIST).lineBreakInCode()
-            after(FILE_ANNOTATION_LIST).blankLines(1)
-
-            after(PACKAGE_DIRECTIVE).blankLines(1)
-            between(IMPORT_DIRECTIVE, IMPORT_DIRECTIVE).lineBreakInCode()
-            after(IMPORT_LIST).blankLines(1)
-
             before(DOC_COMMENT).lineBreakInCode()
             between(PROPERTY, PROPERTY).lineBreakInCode()
 
